@@ -36,10 +36,12 @@ const app = {
     exerciseTimerInterval: null,
     exerciseTimerEnd: null,
     activeExerciseTimer: null,
+    lastSyncedWorkoutCount: 0,
 
     init() {
         this.loadData();
         this.renderHistory();
+        this.updateSyncBadge();
         
         // Register service worker for PWA
         if ('serviceWorker' in navigator) {
@@ -55,6 +57,7 @@ const app = {
             this.workoutTemplates = data.workoutTemplates || this.workoutTemplates;
             this.workouts = data.workouts || [];
             this.settings = data.settings || this.settings;
+            this.lastSyncedWorkoutCount = data.lastSyncedWorkoutCount || 0;
         }
     },
 
@@ -63,7 +66,8 @@ const app = {
             exercises: this.exercises,
             workoutTemplates: this.workoutTemplates,
             workouts: this.workouts,
-            settings: this.settings
+            settings: this.settings,
+            lastSyncedWorkoutCount: this.lastSyncedWorkoutCount
         }));
     },
 
@@ -1096,10 +1100,13 @@ const app = {
 
             const result = await response.json();
             this.settings.gistId = result.id;
+            
+            // Update synced workout count
+            this.lastSyncedWorkoutCount = this.workouts.length;
             this.saveData();
             
-            // Hide unsynced badge
-            document.getElementById('unsyncedBadge').classList.add('hidden');
+            // Update badge
+            this.updateSyncBadge();
             
             alert('✓ Backup successful! Your data is synced to GitHub.');
         } catch (err) {
@@ -1140,14 +1147,21 @@ const app = {
                 this.exercises = merged.exercises;
                 this.workoutTemplates = merged.workoutTemplates;
                 this.workouts = merged.workouts;
-                // Keep local settings but update gistId
-                this.settings.gistId = cloudData.settings?.gistId || this.settings.gistId;
                 
+                // Merge settings: use cloud settings but preserve local token and gistId
+                const localToken = this.settings.githubToken;
+                const localGistId = this.settings.gistId;
+                this.settings = { ...cloudData.settings };
+                this.settings.githubToken = localToken;
+                this.settings.gistId = localGistId || cloudData.settings?.gistId;
+                
+                // Update synced workout count
+                this.lastSyncedWorkoutCount = this.workouts.length;
                 this.saveData();
                 this.renderHistory();
                 
-                // Hide unsynced badge
-                document.getElementById('unsyncedBadge').classList.add('hidden');
+                // Update badge
+                this.updateSyncBadge();
                 
                 alert('✓ Restore successful! Data merged from cloud.');
             }
@@ -1193,11 +1207,25 @@ const app = {
         };
     },
 
-    markAsUnsynced() {
+    updateSyncBadge() {
         const badge = document.getElementById('unsyncedBadge');
-        if (badge) {
+        if (!badge) return;
+        
+        // Show badge only if:
+        // 1. User has a token configured (sync is set up)
+        // 2. There are new workouts since last sync
+        const hasSyncSetup = this.settings.githubToken && this.settings.githubToken.length > 0;
+        const hasUnsyncedWorkouts = this.workouts.length > this.lastSyncedWorkoutCount;
+        
+        if (hasSyncSetup && hasUnsyncedWorkouts) {
             badge.classList.remove('hidden');
+        } else {
+            badge.classList.add('hidden');
         }
+    },
+
+    markAsUnsynced() {
+        this.updateSyncBadge();
     }
 };
 
