@@ -359,6 +359,70 @@ input[type="file"] {
     display: contents;
 }
 
+.github-setup {
+    background: #0f3460;
+    padding: 20px;
+    border-radius: 8px;
+    margin-top: 20px;
+}
+
+.github-setup h3 {
+    margin-top: 0;
+}
+
+.github-setup ol {
+    margin-left: 20px;
+    margin-bottom: 15px;
+    line-height: 1.6;
+}
+
+.github-setup ul {
+    margin-left: 20px;
+    margin-top: 8px;
+    margin-bottom: 8px;
+}
+
+.github-setup a {
+    color: #00d4ff;
+    text-decoration: none;
+}
+
+.github-setup a:hover {
+    text-decoration: underline;
+}
+
+#backupBtn {
+    position: relative;
+}
+
+.unsynced-badge {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    background: #ff4444;
+    color: white;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: bold;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    50% {
+        transform: scale(1.2);
+        opacity: 0.8;
+    }
+}
+
 @media (max-width: 600px) {
     body {
         padding: 10px;

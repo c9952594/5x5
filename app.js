@@ -4,6 +4,8 @@ const app = {
         barWeight: 20,
         platePairs: [20, 20, 10, 5, 2.5, 1.25], // Actual plate pairs available
         restTimer: 180, // seconds
+        githubToken: '',
+        gistId: '',
     },
 
     // Exercise library - all available exercises
@@ -506,6 +508,7 @@ const app = {
 
         this.workouts.unshift(this.currentWorkout);
         this.saveData();
+        this.markAsUnsynced();
         this.closeWorkoutForm();
         this.renderHistory();
     },
@@ -667,6 +670,29 @@ const app = {
                         <label>Rest Timer (seconds)</label>
                         <input type="number" value="${this.settings.restTimer}" id="setting-restTimer">
                     </div>
+
+                    <div class="form-group github-setup">
+                        <h3>☁️ Cloud Sync Setup</h3>
+                        <p>To sync your workout data across devices using GitHub:</p>
+                        <ol>
+                            <li><strong>Create a GitHub account</strong> (if you don't have one): <a href="https://github.com/signup" target="_blank">github.com/signup</a></li>
+                            <li><strong>Generate a Personal Access Token</strong>:
+                                <ul>
+                                    <li>Go to <a href="https://github.com/settings/tokens/new" target="_blank">github.com/settings/tokens/new</a></li>
+                                    <li>Note: "5x5 Workout Sync"</li>
+                                    <li>Expiration: 90 days (or No expiration)</li>
+                                    <li>Select scope: <strong>✓ gist</strong> (only this one!)</li>
+                                    <li>Click "Generate token"</li>
+                                    <li>Copy the token (starts with "ghp_...")</li>
+                                </ul>
+                            </li>
+                            <li>Paste your token below and click Save</li>
+                            <li>Use "Backup to Cloud" button to sync your data</li>
+                        </ol>
+                        <label>GitHub Personal Access Token</label>
+                        <input type="password" value="${this.settings.githubToken || ''}" id="setting-githubToken" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx">
+                        <small>Your token is stored locally and never shared. It's only used to sync YOUR data to YOUR GitHub account.</small>
+                    </div>
                 </div>
 
                 <div id="settings-exercises" class="settings-tab">
@@ -799,6 +825,7 @@ const app = {
     saveSettings() {
         this.settings.barWeight = parseFloat(document.getElementById('setting-barWeight').value);
         this.settings.restTimer = parseInt(document.getElementById('setting-restTimer').value);
+        this.settings.githubToken = document.getElementById('setting-githubToken').value.trim();
         
         // Parse plate pairs
         const platesText = document.getElementById('setting-plates').value;
@@ -924,6 +951,166 @@ const app = {
             }
         };
         reader.readAsText(file);
+    },
+
+    // GitHub Gist Sync Functions
+    async syncToGist() {
+        if (!this.settings.githubToken) {
+            alert('Please configure your GitHub token in Settings → General first.');
+            return;
+        }
+
+        try {
+            const data = {
+                exercises: this.exercises,
+                workoutTemplates: this.workoutTemplates,
+                workouts: this.workouts,
+                settings: { ...this.settings, githubToken: undefined }, // Don't sync token
+                lastSync: new Date().toISOString()
+            };
+
+            const gistData = {
+                description: '5x5 Workout Tracker Data',
+                public: false,
+                files: {
+                    '5x5-data.json': {
+                        content: JSON.stringify(data, null, 2)
+                    }
+                }
+            };
+
+            let response;
+            if (this.settings.gistId) {
+                // Update existing gist
+                response = await fetch(`https://api.github.com/gists/${this.settings.gistId}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Authorization': `token ${this.settings.githubToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(gistData)
+                });
+            } else {
+                // Create new gist
+                response = await fetch('https://api.github.com/gists', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `token ${this.settings.githubToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(gistData)
+                });
+            }
+
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.message || 'Failed to sync to GitHub');
+            }
+
+            const result = await response.json();
+            this.settings.gistId = result.id;
+            this.saveData();
+            
+            // Hide unsynced badge
+            document.getElementById('unsyncedBadge').classList.add('hidden');
+            
+            alert('✓ Backup successful! Your data is synced to GitHub.');
+        } catch (err) {
+            alert('Backup failed: ' + err.message + '\n\nPlease check your token has "gist" permissions.');
+        }
+    },
+
+    async syncFromGist() {
+        if (!this.settings.githubToken) {
+            alert('Please configure your GitHub token in Settings → General first.');
+            return;
+        }
+
+        if (!this.settings.gistId) {
+            alert('No cloud backup found. Please use "Backup to Cloud" first from your primary device.');
+            return;
+        }
+
+        try {
+            const response = await fetch(`https://api.github.com/gists/${this.settings.gistId}`, {
+                headers: {
+                    'Authorization': `token ${this.settings.githubToken}`
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to fetch backup from GitHub');
+            }
+
+            const gist = await response.json();
+            const fileContent = gist.files['5x5-data.json'].content;
+            const cloudData = JSON.parse(fileContent);
+
+            // Merge data intelligently
+            const merged = this.mergeWorkoutData(cloudData);
+
+            if (confirm(`Found cloud backup from ${new Date(cloudData.lastSync).toLocaleString()}.\n\nMerge with local data? This will combine workouts from both sources.`)) {
+                this.exercises = merged.exercises;
+                this.workoutTemplates = merged.workoutTemplates;
+                this.workouts = merged.workouts;
+                // Keep local settings but update gistId
+                this.settings.gistId = cloudData.settings?.gistId || this.settings.gistId;
+                
+                this.saveData();
+                this.renderHistory();
+                
+                // Hide unsynced badge
+                document.getElementById('unsyncedBadge').classList.add('hidden');
+                
+                alert('✓ Restore successful! Data merged from cloud.');
+            }
+        } catch (err) {
+            alert('Restore failed: ' + err.message);
+        }
+    },
+
+    mergeWorkoutData(cloudData) {
+        // Merge workouts by date, keeping most recent version of each
+        const workoutMap = new Map();
+        
+        // Add local workouts
+        this.workouts.forEach(w => {
+            workoutMap.set(w.date, w);
+        });
+        
+        // Add/update with cloud workouts (cloud wins on conflicts)
+        cloudData.workouts.forEach(w => {
+            workoutMap.set(w.date, w);
+        });
+        
+        // Sort by date descending
+        const mergedWorkouts = Array.from(workoutMap.values())
+            .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        // Merge exercises (combine both sets, cloud wins on name conflicts)
+        const mergedExercises = { ...this.exercises };
+        Object.entries(cloudData.exercises || {}).forEach(([id, ex]) => {
+            mergedExercises[id] = ex;
+        });
+
+        // Merge workout templates (combine both sets, cloud wins on conflicts)
+        const mergedTemplates = { ...this.workoutTemplates };
+        Object.entries(cloudData.workoutTemplates || {}).forEach(([id, template]) => {
+            mergedTemplates[id] = template;
+        });
+
+        return {
+            exercises: mergedExercises,
+            workoutTemplates: mergedTemplates,
+            workouts: mergedWorkouts
+        };
+    },
+
+    markAsUnsynced() {
+        const badge = document.getElementById('unsyncedBadge');
+        if (badge) {
+            badge.classList.remove('hidden');
+        }
     }
 };
 
