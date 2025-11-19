@@ -686,12 +686,24 @@ const app = {
                                     <li>Copy the token (starts with "ghp_...")</li>
                                 </ul>
                             </li>
-                            <li>Paste your token below and click Save</li>
-                            <li>Use "Backup to Cloud" button to sync your data</li>
+                            <li>Paste your token below (gist selector will appear)</li>
+                            <li><strong>Primary Device:</strong> Select "Create new backup" and click "Backup to Cloud"</li>
+                            <li><strong>Other Devices:</strong> Enter same token, select the existing backup from the dropdown, then "Restore from Cloud"</li>
                         </ol>
                         <label>GitHub Personal Access Token</label>
-                        <input type="password" value="${this.settings.githubToken || ''}" id="setting-githubToken" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx">
+                        <input type="password" value="${this.settings.githubToken || ''}" id="setting-githubToken" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" onchange="app.onTokenChange()">
                         <small>Your token is stored locally and never shared. It's only used to sync YOUR data to YOUR GitHub account.</small>
+                        
+                        <div id="gist-selector" class="gist-selector" style="display: none; margin-top: 20px;">
+                            <label>Select Gist to Sync With</label>
+                            <div style="display: flex; gap: 10px; align-items: center;">
+                                <select id="setting-gistId" style="flex: 1;">
+                                    <option value="">Create new backup...</option>
+                                </select>
+                                <button type="button" class="secondary icon-btn" onclick="app.loadGists()" title="Refresh gist list">🔄</button>
+                            </div>
+                            <small>Select an existing gist to share data across devices, or create a new one from your primary device.</small>
+                        </div>
                     </div>
                 </div>
 
@@ -714,6 +726,11 @@ const app = {
         document.body.appendChild(modal);
         this.renderExercisesList();
         this.renderWorkoutsList();
+        
+        // Show gist selector if token exists
+        if (this.settings.githubToken) {
+            this.onTokenChange();
+        }
     },
 
     switchTab(tabName) {
@@ -826,6 +843,12 @@ const app = {
         this.settings.barWeight = parseFloat(document.getElementById('setting-barWeight').value);
         this.settings.restTimer = parseInt(document.getElementById('setting-restTimer').value);
         this.settings.githubToken = document.getElementById('setting-githubToken').value.trim();
+        
+        // Save selected gist ID
+        const gistSelect = document.getElementById('setting-gistId');
+        if (gistSelect) {
+            this.settings.gistId = gistSelect.value;
+        }
         
         // Parse plate pairs
         const platesText = document.getElementById('setting-plates').value;
@@ -954,6 +977,70 @@ const app = {
     },
 
     // GitHub Gist Sync Functions
+    async onTokenChange() {
+        const token = document.getElementById('setting-githubToken').value.trim();
+        const gistSelector = document.getElementById('gist-selector');
+        
+        if (token && gistSelector) {
+            gistSelector.style.display = 'block';
+            await this.loadGists();
+        } else if (gistSelector) {
+            gistSelector.style.display = 'none';
+        }
+    },
+
+    async loadGists() {
+        const token = document.getElementById('setting-githubToken').value.trim();
+        if (!token) return;
+
+        const select = document.getElementById('setting-gistId');
+        if (!select) return;
+
+        try {
+            const response = await fetch('https://api.github.com/gists', {
+                headers: {
+                    'Authorization': `token ${token}`
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to load gists');
+            }
+
+            const gists = await response.json();
+            
+            // Filter for 5x5 workout gists
+            const workoutGists = gists.filter(g => 
+                g.description === '5x5 Workout Tracker Data' || 
+                g.files['5x5-data.json']
+            );
+
+            // Populate dropdown
+            select.innerHTML = '<option value="">Create new backup...</option>';
+            workoutGists.forEach(gist => {
+                const option = document.createElement('option');
+                option.value = gist.id;
+                const date = new Date(gist.updated_at).toLocaleString();
+                option.textContent = `Backup from ${date} (${gist.id.substring(0, 8)}...)`;
+                if (gist.id === this.settings.gistId) {
+                    option.selected = true;
+                }
+                select.appendChild(option);
+            });
+
+            if (workoutGists.length === 0) {
+                const option = document.createElement('option');
+                option.value = '';
+                option.textContent = 'No backups found - create your first one!';
+                option.disabled = true;
+                select.appendChild(option);
+            }
+        } catch (err) {
+            console.error('Error loading gists:', err);
+            alert('Could not load gists. Please check your token has "gist" permissions.');
+        }
+    },
+    
     async syncToGist() {
         if (!this.settings.githubToken) {
             alert('Please configure your GitHub token in Settings → General first.');

@@ -391,6 +391,16 @@ input[type="file"] {
     text-decoration: underline;
 }
 
+.gist-selector {
+    background: #1a1a2e;
+    padding: 15px;
+    border-radius: 8px;
+}
+
+.gist-selector select {
+    margin-bottom: 0;
+}
+
 #backupBtn {
     position: relative;
 }
