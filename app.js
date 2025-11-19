@@ -4,27 +4,36 @@ const app = {
         barWeight: 20,
         platePairs: [20, 20, 10, 5, 2.5, 1.25], // Actual plate pairs available
         restTimer: 180, // seconds
-        increments: {
-            squat: 2.5,
-            bench: 2.5,
-            row: 2.5,
-            ohp: 2.5,
-            deadlift: 5
-        }
     },
 
+    // Exercise library - all available exercises
     exercises: {
-        squat: { name: 'Squat', weight: 20 },
-        bench: { name: 'Bench Press', weight: 20 },
-        row: { name: 'Barbell Row', weight: 30 },
-        ohp: { name: 'Overhead Press', weight: 20 },
-        deadlift: { name: 'Deadlift', weight: 40 }
+        squat: { name: 'Squat', type: 'weight', defaultWeight: 60, increment: 2.5, sets: 5 },
+        bench: { name: 'Bench Press', type: 'weight', defaultWeight: 40, increment: 2.5, sets: 5 },
+        row: { name: 'Barbell Row', type: 'weight', defaultWeight: 40, increment: 2.5, sets: 5 },
+        ohp: { name: 'Overhead Press', type: 'weight', defaultWeight: 30, increment: 2.5, sets: 5 },
+        deadlift: { name: 'Deadlift', type: 'weight', defaultWeight: 60, increment: 5, sets: 1 }
+    },
+
+    // Workout templates - configurable workout routines
+    workoutTemplates: {
+        A: {
+            name: 'Workout A',
+            exercises: ['squat', 'bench', 'row']
+        },
+        B: {
+            name: 'Workout B',
+            exercises: ['squat', 'ohp', 'deadlift']
+        }
     },
 
     workouts: [],
     currentWorkout: null,
     restTimerInterval: null,
     restTimerEnd: null,
+    exerciseTimerInterval: null,
+    exerciseTimerEnd: null,
+    activeExerciseTimer: null,
 
     init() {
         this.loadData();
@@ -41,6 +50,7 @@ const app = {
         if (saved) {
             const data = JSON.parse(saved);
             this.exercises = data.exercises || this.exercises;
+            this.workoutTemplates = data.workoutTemplates || this.workoutTemplates;
             this.workouts = data.workouts || [];
             this.settings = data.settings || this.settings;
         }
@@ -49,6 +59,7 @@ const app = {
     saveData() {
         localStorage.setItem('5x5-data', JSON.stringify({
             exercises: this.exercises,
+            workoutTemplates: this.workoutTemplates,
             workouts: this.workouts,
             settings: this.settings
         }));
@@ -59,24 +70,47 @@ const app = {
         
         // Auto-select next workout type based on last workout
         const lastWorkout = this.workouts[0];
-        const nextType = lastWorkout ? (lastWorkout.type === 'A' ? 'B' : 'A') : 'A';
-        document.getElementById('workoutType').value = nextType;
+        const templateKeys = Object.keys(this.workoutTemplates);
+        if (lastWorkout && templateKeys.length > 0) {
+            const lastIndex = templateKeys.indexOf(lastWorkout.type);
+            const nextIndex = (lastIndex + 1) % templateKeys.length;
+            document.getElementById('workoutType').value = templateKeys[nextIndex];
+        } else if (templateKeys.length > 0) {
+            document.getElementById('workoutType').value = templateKeys[0];
+        }
         
+        this.populateWorkoutTypeDropdown();
         this.selectWorkoutType();
+    },
+
+    populateWorkoutTypeDropdown() {
+        const select = document.getElementById('workoutType');
+        const currentValue = select.value;
+        
+        select.innerHTML = '<option value="">Select workout...</option>';
+        Object.entries(this.workoutTemplates).forEach(([key, template]) => {
+            const option = document.createElement('option');
+            option.value = key;
+            option.textContent = `${template.name} (${template.exercises.map(id => this.exercises[id].name).join(', ')})`;
+            select.appendChild(option);
+        });
+        
+        if (currentValue) {
+            select.value = currentValue;
+        }
     },
 
     selectWorkoutType() {
         const type = document.getElementById('workoutType').value;
         const grid = document.getElementById('exerciseGrid');
         
-        if (!type) {
+        if (!type || !this.workoutTemplates[type]) {
             grid.innerHTML = '';
             return;
         }
 
-        const exerciseList = type === 'A' 
-            ? ['squat', 'bench', 'row']
-            : ['squat', 'ohp', 'deadlift'];
+        const template = this.workoutTemplates[type];
+        const exerciseList = template.exercises;
 
         this.currentWorkout = {
             date: new Date().toISOString(),
@@ -86,41 +120,73 @@ const app = {
 
         grid.innerHTML = exerciseList.map(key => {
             const ex = this.exercises[key];
-            const sets = key === 'deadlift' ? 1 : 5;
-            const weight = this.calculateNextWeight(key);
-            const plateResult = this.calculatePlates(weight);
+            if (!ex) return '';
             
-            let plateHtml = plateResult.display;
-            if (plateResult.diff !== 0 && plateResult.diff !== undefined) {
-                plateHtml += `<br><strong>Actual: ${plateResult.actualWeight}kg</strong>`;
-                plateHtml += ` <button class="small-btn" onclick="app.useActualWeight('${key}', ${plateResult.actualWeight})">Use This Weight</button>`;
+            const sets = ex.sets || 5;
+            const isTimeBased = ex.type === 'time';
+            
+            if (isTimeBased) {
+                const duration = this.calculateNextDuration(key);
+                return `
+                    <div class="exercise-item">
+                        <div class="exercise-header">
+                            <span class="exercise-name">${ex.name}</span>
+                        </div>
+                        <div class="weight-input">
+                            <label>Duration (seconds):</label>
+                            <input type="number" step="5" value="${duration}" 
+                                   id="duration-${key}">
+                        </div>
+                        <div class="sets-display">
+                            ${Array.from({length: sets}, (_, i) => `
+                                <input type="checkbox" id="set-${key}-${i}" 
+                                       onchange="app.handleSetCheck('${key}', ${i})">
+                            `).join('')}
+                        </div>
+                        <div class="timer-controls">
+                            <button class="small-btn" onclick="app.startExerciseTimer('${key}')">Start Timer</button>
+                            <button class="small-btn" onclick="app.stopExerciseTimer()">Stop</button>
+                        </div>
+                        <div class="timer-display" id="exercise-timer-${key}"></div>
+                        <div class="timer-display" id="timer-${key}"></div>
+                    </div>
+                `;
             } else {
-                plateHtml += `<br><strong>Total: ${plateResult.actualWeight}kg</strong>`;
+                const weight = this.calculateNextWeight(key);
+                const plateResult = this.calculatePlates(weight);
+                
+                let plateHtml = plateResult.display;
+                if (plateResult.diff !== 0 && plateResult.diff !== undefined) {
+                    plateHtml += `<br><strong>Actual: ${plateResult.actualWeight}kg</strong>`;
+                    plateHtml += ` <button class="small-btn" onclick="app.useActualWeight('${key}', ${plateResult.actualWeight})">Use This Weight</button>`;
+                } else {
+                    plateHtml += `<br><strong>Total: ${plateResult.actualWeight}kg</strong>`;
+                }
+                
+                return `
+                    <div class="exercise-item">
+                        <div class="exercise-header">
+                            <span class="exercise-name">${ex.name}</span>
+                        </div>
+                        <div class="weight-input">
+                            <label>Weight (kg):</label>
+                            <input type="number" step="2.5" value="${weight}" 
+                                   id="weight-${key}" 
+                                   onchange="app.updatePlates('${key}')">
+                        </div>
+                        <div class="sets-display">
+                            ${Array.from({length: sets}, (_, i) => `
+                                <input type="checkbox" id="set-${key}-${i}" 
+                                       onchange="app.handleSetCheck('${key}', ${i})">
+                            `).join('')}
+                        </div>
+                        <div class="plate-calculation" id="plates-${key}">
+                            ${plateHtml}
+                        </div>
+                        <div class="timer-display" id="timer-${key}"></div>
+                    </div>
+                `;
             }
-            
-            return `
-                <div class="exercise-item">
-                    <div class="exercise-header">
-                        <span class="exercise-name">${ex.name}</span>
-                    </div>
-                    <div class="weight-input">
-                        <label>Weight (kg):</label>
-                        <input type="number" step="2.5" value="${weight}" 
-                               id="weight-${key}" 
-                               onchange="app.updatePlates('${key}')">
-                    </div>
-                    <div class="sets-display">
-                        ${Array.from({length: sets}, (_, i) => `
-                            <input type="checkbox" id="set-${key}-${i}" 
-                                   onchange="app.handleSetCheck('${key}', ${i})">
-                        `).join('')}
-                    </div>
-                    <div class="plate-calculation" id="plates-${key}">
-                        ${plateHtml}
-                    </div>
-                    <div class="timer-display" id="timer-${key}"></div>
-                </div>
-            `;
         }).join('');
     },
 
@@ -201,22 +267,26 @@ const app = {
     },
 
     calculateNextWeight(exerciseKey) {
+        const exercise = this.exercises[exerciseKey];
+        if (!exercise) return 20;
+        
         // Get last 3 workouts for this exercise
         const recentWorkouts = this.workouts
             .filter(w => w.exercises[exerciseKey])
             .slice(0, 3);
 
         if (recentWorkouts.length === 0) {
-            return this.exercises[exerciseKey].weight;
+            return exercise.defaultWeight || 20;
         }
 
         const lastWorkout = recentWorkouts[0];
         const lastData = lastWorkout.exercises[exerciseKey];
+        const increment = exercise.increment || 2.5;
 
         // Check if all sets were completed
         if (lastData.completed === lastData.sets) {
             // Success - increase weight
-            return lastData.weight + this.settings.increments[exerciseKey];
+            return lastData.weight + increment;
         } else if (recentWorkouts.length === 3 && 
                    recentWorkouts.every(w => w.exercises[exerciseKey].completed < w.exercises[exerciseKey].sets)) {
             // Failed 3 times in a row - decrease by 10%
@@ -225,6 +295,38 @@ const app = {
         } else {
             // Keep same weight
             return lastData.weight;
+        }
+    },
+
+    calculateNextDuration(exerciseKey) {
+        const exercise = this.exercises[exerciseKey];
+        if (!exercise) return 60;
+        
+        // Get last 3 workouts for this exercise
+        const recentWorkouts = this.workouts
+            .filter(w => w.exercises[exerciseKey])
+            .slice(0, 3);
+
+        if (recentWorkouts.length === 0) {
+            return exercise.duration || 60;
+        }
+
+        const lastWorkout = recentWorkouts[0];
+        const lastData = lastWorkout.exercises[exerciseKey];
+        const increment = exercise.increment || 5;
+
+        // Check if all sets were completed
+        if (lastData.completed === lastData.sets) {
+            // Success - increase duration
+            return lastData.duration + increment;
+        } else if (recentWorkouts.length === 3 && 
+                   recentWorkouts.every(w => w.exercises[exerciseKey].completed < w.exercises[exerciseKey].sets)) {
+            // Failed 3 times in a row - decrease by 10%
+            const newDuration = Math.round(lastData.duration * 0.9);
+            return Math.max(10, newDuration); // Minimum 10 seconds
+        } else {
+            // Keep same duration
+            return lastData.duration;
         }
     },
 
@@ -317,28 +419,89 @@ const app = {
         oscillator.stop(audioContext.currentTime + 0.5);
     },
 
+    startExerciseTimer(exerciseKey) {
+        // Stop any existing exercise timer
+        this.stopExerciseTimer();
+
+        const durationInput = document.getElementById(`duration-${exerciseKey}`);
+        const duration = parseInt(durationInput.value);
+        const timerDisplay = document.getElementById(`exercise-timer-${exerciseKey}`);
+        
+        this.activeExerciseTimer = exerciseKey;
+        this.exerciseTimerEnd = Date.now() + (duration * 1000);
+        
+        timerDisplay.innerHTML = `<div class="exercise-timer">
+            <span id="exercise-countdown">${this.formatTime(duration)}</span>
+        </div>`;
+
+        this.exerciseTimerInterval = setInterval(() => {
+            const remaining = Math.max(0, Math.ceil((this.exerciseTimerEnd - Date.now()) / 1000));
+            const countdown = document.getElementById('exercise-countdown');
+            
+            if (countdown) {
+                countdown.textContent = this.formatTime(remaining);
+            }
+
+            if (remaining === 0) {
+                this.playSound();
+                this.stopExerciseTimer();
+                timerDisplay.innerHTML = '<div class="timer-complete">Time complete!</div>';
+                setTimeout(() => {
+                    timerDisplay.innerHTML = '';
+                }, 3000);
+            }
+        }, 100);
+    },
+
+    stopExerciseTimer() {
+        if (this.exerciseTimerInterval) {
+            clearInterval(this.exerciseTimerInterval);
+            this.exerciseTimerInterval = null;
+            this.exerciseTimerEnd = null;
+            
+            if (this.activeExerciseTimer) {
+                const timerDisplay = document.getElementById(`exercise-timer-${this.activeExerciseTimer}`);
+                if (timerDisplay) {
+                    timerDisplay.innerHTML = '';
+                }
+                this.activeExerciseTimer = null;
+            }
+        }
+    },
+
     saveWorkout() {
         const type = document.getElementById('workoutType').value;
-        if (!type) return;
+        if (!type || !this.workoutTemplates[type]) return;
 
-        const exerciseList = type === 'A' 
-            ? ['squat', 'bench', 'row']
-            : ['squat', 'ohp', 'deadlift'];
+        const template = this.workoutTemplates[type];
+        const exerciseList = template.exercises;
 
         this.currentWorkout.exercises = {};
 
         exerciseList.forEach(key => {
-            const weight = parseFloat(document.getElementById(`weight-${key}`).value);
-            const sets = key === 'deadlift' ? 1 : 5;
+            const ex = this.exercises[key];
+            if (!ex) return;
+            
+            const sets = ex.sets || 5;
             const completedSets = Array.from({length: sets}, (_, i) => 
                 document.getElementById(`set-${key}-${i}`).checked
             ).filter(Boolean).length;
 
-            this.currentWorkout.exercises[key] = {
-                weight: weight,
-                sets: sets,
-                completed: completedSets
-            };
+            if (ex.type === 'time') {
+                const duration = parseInt(document.getElementById(`duration-${key}`).value);
+                this.currentWorkout.exercises[key] = {
+                    duration: duration,
+                    sets: sets,
+                    completed: completedSets
+                };
+            } else {
+                const weight = parseFloat(document.getElementById(`weight-${key}`).value);
+                this.currentWorkout.exercises[key] = {
+                    weight: weight,
+                    sets: sets,
+                    completed: completedSets
+                };
+            }
         });
 
         this.workouts.unshift(this.currentWorkout);
@@ -355,6 +518,7 @@ const app = {
 
     closeWorkoutForm() {
         this.cancelRestTimer();
+        this.stopExerciseTimer();
         document.getElementById('workoutForm').classList.add('hidden');
         this.currentWorkout = null;
     },
@@ -378,16 +542,29 @@ const app = {
             });
 
             const exercises = Object.entries(workout.exercises).map(([key, data]) => {
-                const name = this.exercises[key].name;
-                return `<div class="workout-exercise">
-                    ${name}: ${data.weight}kg - ${data.completed}/${data.sets} sets
-                </div>`;
+                const exercise = this.exercises[key];
+                const name = exercise ? exercise.name : key;
+                
+                if (data.duration !== undefined) {
+                    // Time-based exercise
+                    return `<div class="workout-exercise">
+                        ${name}: ${data.duration}s - ${data.completed}/${data.sets} sets
+                    </div>`;
+                } else {
+                    // Weight-based exercise
+                    return `<div class="workout-exercise">
+                        ${name}: ${data.weight}kg - ${data.completed}/${data.sets} sets
+                    </div>`;
+                }
             }).join('');
+
+            const template = this.workoutTemplates[workout.type];
+            const workoutName = template ? template.name : `Workout ${workout.type}`;
 
             return `
                 <div class="workout-card">
                     <div class="workout-header">
-                        <div class="workout-date">${date} - Workout ${workout.type}</div>
+                        <div class="workout-date">${date} - ${workoutName}</div>
                         <div class="workout-actions">
                             <button class="icon-btn" onclick="app.editWorkout(${index})" title="Edit">✏️</button>
                             <button class="icon-btn" onclick="app.deleteWorkout(${index})" title="Delete">🗑️</button>
@@ -465,32 +642,42 @@ const app = {
         const modal = document.createElement('div');
         modal.className = 'modal';
         modal.innerHTML = `
-            <div class="modal-content">
+            <div class="modal-content settings-modal">
                 <h2>Settings</h2>
                 
-                <div class="form-group">
-                    <label>Bar Weight (kg)</label>
-                    <input type="number" step="0.5" value="${this.settings.barWeight}" id="setting-barWeight">
+                <div class="settings-tabs">
+                    <button class="tab-btn active" onclick="app.switchTab('general')">General</button>
+                    <button class="tab-btn" onclick="app.switchTab('exercises')">Exercises</button>
+                    <button class="tab-btn" onclick="app.switchTab('workouts')">Workouts</button>
                 </div>
 
-                <div class="form-group">
-                    <label>Available Plate Pairs (kg, list all individual plates, comma-separated)</label>
-                    <input type="text" value="${this.settings.platePairs.join(', ')}" id="setting-plates">
-                    <small>Example: 20, 10, 10, 10, 5, 5, 5, 2.5, 2.5, 1.25, 1.25, 0.5, 0.5</small>
-                </div>
-
-                <div class="form-group">
-                    <label>Rest Timer (seconds)</label>
-                    <input type="number" value="${this.settings.restTimer}" id="setting-restTimer">
-                </div>
-
-                <h3>Exercise Increments (kg)</h3>
-                ${Object.keys(this.settings.increments).map(key => `
+                <div id="settings-general" class="settings-tab active">
                     <div class="form-group">
-                        <label>${this.exercises[key].name}</label>
-                        <input type="number" step="0.5" value="${this.settings.increments[key]}" id="setting-increment-${key}">
+                        <label>Bar Weight (kg)</label>
+                        <input type="number" step="0.5" value="${this.settings.barWeight}" id="setting-barWeight">
                     </div>
-                `).join('')}
+
+                    <div class="form-group">
+                        <label>Available Plate Pairs (kg, list all individual plates, comma-separated)</label>
+                        <input type="text" value="${this.settings.platePairs.join(', ')}" id="setting-plates">
+                        <small>Example: 20, 10, 10, 10, 5, 5, 5, 2.5, 2.5, 1.25, 1.25, 0.5, 0.5</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Rest Timer (seconds)</label>
+                        <input type="number" value="${this.settings.restTimer}" id="setting-restTimer">
+                    </div>
+                </div>
+
+                <div id="settings-exercises" class="settings-tab">
+                    <div id="exercises-list"></div>
+                    <button class="secondary" onclick="app.addExercise()">+ Add Exercise</button>
+                </div>
+
+                <div id="settings-workouts" class="settings-tab">
+                    <div id="workouts-list"></div>
+                    <button class="secondary" onclick="app.addWorkoutTemplate()">+ Add Workout</button>
+                </div>
 
                 <div style="display: flex; gap: 10px; margin-top: 20px;">
                     <button onclick="app.saveSettings()">Save</button>
@@ -499,6 +686,114 @@ const app = {
             </div>
         `;
         document.body.appendChild(modal);
+        this.renderExercisesList();
+        this.renderWorkoutsList();
+    },
+
+    switchTab(tabName) {
+        document.querySelectorAll('.settings-tab').forEach(tab => tab.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+        document.getElementById(`settings-${tabName}`).classList.add('active');
+        event.target.classList.add('active');
+    },
+
+    renderExercisesList() {
+        const container = document.getElementById('exercises-list');
+        container.innerHTML = Object.entries(this.exercises).map(([id, ex]) => {
+            const isTimeBased = ex.type === 'time';
+            return `
+                <div class="exercise-config" data-id="${id}">
+                    <input type="text" value="${ex.name}" placeholder="Exercise Name" data-field="name" class="exercise-field">
+                    <select data-field="type" class="exercise-field" onchange="app.toggleExerciseType('${id}', this.value)">
+                        <option value="weight" ${!isTimeBased ? 'selected' : ''}>Weight-based</option>
+                        <option value="time" ${isTimeBased ? 'selected' : ''}>Time-based</option>
+                    </select>
+                    <div class="exercise-type-fields" id="fields-${id}">
+                        ${isTimeBased ? `
+                            <input type="number" value="${ex.duration || 60}" placeholder="Duration (sec)" data-field="duration" class="exercise-field">
+                            <input type="number" step="5" value="${ex.increment || 5}" placeholder="Increment (sec)" data-field="increment" class="exercise-field">
+                        ` : `
+                            <input type="number" step="2.5" value="${ex.defaultWeight || 20}" placeholder="Default Weight" data-field="defaultWeight" class="exercise-field">
+                            <input type="number" step="0.5" value="${ex.increment || 2.5}" placeholder="Increment" data-field="increment" class="exercise-field">
+                        `}
+                    </div>
+                    <input type="number" value="${ex.sets}" placeholder="Sets" data-field="sets" class="exercise-field">
+                    <button class="icon-btn" onclick="app.deleteExercise('${id}')" title="Delete">🗑️</button>
+                </div>
+            `;
+        }).join('');
+    },
+
+    toggleExerciseType(id, type) {
+        this.exercises[id].type = type;
+        this.renderExercisesList();
+    },
+
+    renderWorkoutsList() {
+        const container = document.getElementById('workouts-list');
+        container.innerHTML = Object.entries(this.workoutTemplates).map(([id, template]) => `
+            <div class="workout-config" data-id="${id}">
+                <input type="text" value="${template.name}" placeholder="Workout Name" data-field="name" class="workout-name-field">
+                <div class="exercise-checkboxes">
+                    ${Object.entries(this.exercises).map(([exId, ex]) => `
+                        <label>
+                            <input type="checkbox" value="${exId}" 
+                                   ${template.exercises.includes(exId) ? 'checked' : ''}
+                                   onchange="app.updateWorkoutExercises('${id}')">
+                            ${ex.name}
+                        </label>
+                    `).join('')}
+                </div>
+                <button class="icon-btn" onclick="app.deleteWorkoutTemplate('${id}')" title="Delete">🗑️</button>
+            </div>
+        `).join('');
+    },
+
+    updateWorkoutExercises(workoutId) {
+        const container = document.querySelector(`.workout-config[data-id="${workoutId}"] .exercise-checkboxes`);
+        const selected = Array.from(container.querySelectorAll('input[type="checkbox"]:checked')).map(cb => cb.value);
+        this.workoutTemplates[workoutId].exercises = selected;
+    },
+
+    addExercise() {
+        const id = 'ex_' + Date.now();
+        this.exercises[id] = {
+            name: 'New Exercise',
+            type: 'weight',
+            defaultWeight: 20,
+            increment: 2.5,
+            sets: 5
+        };
+        this.renderExercisesList();
+        this.renderWorkoutsList();
+    },
+
+    deleteExercise(id) {
+        if (confirm(`Delete ${this.exercises[id].name}?`)) {
+            delete this.exercises[id];
+            // Remove from workout templates
+            Object.values(this.workoutTemplates).forEach(template => {
+                template.exercises = template.exercises.filter(exId => exId !== id);
+            });
+            this.renderExercisesList();
+            this.renderWorkoutsList();
+        }
+    },
+
+    addWorkoutTemplate() {
+        const id = String.fromCharCode(65 + Object.keys(this.workoutTemplates).length); // A, B, C, etc
+        this.workoutTemplates[id] = {
+            name: `Workout ${id}`,
+            exercises: []
+        };
+        this.renderWorkoutsList();
+    },
+
+    deleteWorkoutTemplate(id) {
+        if (confirm(`Delete ${this.workoutTemplates[id].name}?`)) {
+            delete this.workoutTemplates[id];
+            this.renderWorkoutsList();
+        }
     },
 
     saveSettings() {
@@ -509,9 +804,31 @@ const app = {
         const platesText = document.getElementById('setting-plates').value;
         this.settings.platePairs = platesText.split(',').map(p => parseFloat(p.trim())).filter(p => !isNaN(p)).sort((a, b) => b - a);
 
-        // Save increments
-        Object.keys(this.settings.increments).forEach(key => {
-            this.settings.increments[key] = parseFloat(document.getElementById(`setting-increment-${key}`).value);
+        // Save exercise configurations
+        document.querySelectorAll('.exercise-config').forEach(div => {
+            const id = div.dataset.id;
+            const exercise = this.exercises[id];
+            
+            // Clear old fields
+            delete exercise.defaultWeight;
+            delete exercise.duration;
+            
+            div.querySelectorAll('.exercise-field, select[data-field]').forEach(input => {
+                const field = input.dataset.field;
+                let value = input.value;
+                if (field === 'name' || field === 'type') {
+                    exercise[field] = value;
+                } else if (field) {
+                    exercise[field] = parseFloat(value);
+                }
+            });
+        });
+
+        // Save workout template names
+        document.querySelectorAll('.workout-config').forEach(div => {
+            const id = div.dataset.id;
+            const nameField = div.querySelector('.workout-name-field');
+            this.workoutTemplates[id].name = nameField.value;
         });
 
         this.saveData();
@@ -522,6 +839,7 @@ const app = {
     exportData() {
         const data = {
             exercises: this.exercises,
+            workoutTemplates: this.workoutTemplates,
             workouts: this.workouts,
             settings: this.settings,
             exportDate: new Date().toISOString()
@@ -538,7 +856,7 @@ const app = {
 
     exportCSV() {
         // Create CSV header
-        const headers = ['Date', 'Workout Type', 'Exercise', 'Weight (kg)', 'Sets Completed', 'Total Sets'];
+        const headers = ['Date', 'Workout Type', 'Exercise', 'Weight (kg)', 'Duration (s)', 'Sets Completed', 'Total Sets'];
         const rows = [headers];
 
         // Add workout data
@@ -548,12 +866,14 @@ const app = {
             const dateTime = `${date} ${time}`;
 
             Object.entries(workout.exercises).forEach(([key, data]) => {
-                const exerciseName = this.exercises[key].name;
+                const exercise = this.exercises[key];
+                const exerciseName = exercise ? exercise.name : key;
                 rows.push([
                     dateTime,
                     workout.type,
                     exerciseName,
-                    data.weight,
+                    data.weight || '',
+                    data.duration || '',
                     data.completed,
                     data.sets
                 ]);
@@ -592,6 +912,7 @@ const app = {
                 const data = JSON.parse(e.target.result);
                 if (confirm('This will replace all current data. Continue?')) {
                     this.exercises = data.exercises || this.exercises;
+                    this.workoutTemplates = data.workoutTemplates || this.workoutTemplates;
                     this.workouts = data.workouts || [];
                     this.settings = data.settings || this.settings;
                     this.saveData();

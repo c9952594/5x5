@@ -231,6 +231,84 @@ input[type="file"] {
     margin-top: 5px;
 }
 
+.settings-modal {
+    max-width: 700px;
+}
+
+.settings-tabs {
+    display: flex;
+    gap: 5px;
+    margin-bottom: 20px;
+    border-bottom: 2px solid #0f3460;
+}
+
+.tab-btn {
+    flex: 1;
+    padding: 10px 15px;
+    background: transparent;
+    color: #aaa;
+    border: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.tab-btn.active {
+    color: #00d4ff;
+    border-bottom-color: #00d4ff;
+}
+
+.settings-tab {
+    display: none;
+}
+
+.settings-tab.active {
+    display: block;
+}
+
+.exercise-config, .workout-config {
+    background: #0f3460;
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 10px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.exercise-field {
+    flex: 1;
+    min-width: 100px;
+}
+
+.workout-name-field {
+    min-width: 200px;
+}
+
+.exercise-checkboxes {
+    flex: 1 1 100%;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.exercise-checkboxes label {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    color: #eee;
+    font-weight: normal;
+    cursor: pointer;
+}
+
+.exercise-checkboxes input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+}
+
 .rest-timer {
     background: #00d4ff;
     color: #1a1a2e;
@@ -258,6 +336,27 @@ input[type="file"] {
     margin-top: 10px;
     text-align: center;
     font-weight: bold;
+}
+
+.exercise-timer {
+    background: #ff6b00;
+    color: #fff;
+    padding: 12px;
+    border-radius: 6px;
+    margin-top: 10px;
+    text-align: center;
+    font-weight: bold;
+    font-size: 18px;
+}
+
+.timer-controls {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.exercise-type-fields {
+    display: contents;
 }
 
 @media (max-width: 600px) {
