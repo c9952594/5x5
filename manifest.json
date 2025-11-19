@@ -2,7 +2,7 @@
   "name": "5x5 Workout Tracker",
   "short_name": "5x5",
   "description": "Track your 5x5 strength training workouts with custom plate calculations",
-  "start_url": "https://c9952594.github.io/5x5/",
+  "start_url": "http://5x5.craignorton.me/",
   "display": "standalone",
   "background_color": "#1a1a2e",
   "theme_color": "#1a1a2e",
