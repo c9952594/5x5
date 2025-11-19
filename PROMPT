@@ -1,0 +1,19 @@
+Can you create a settings section that has:
+- The barbell weight
+- The plates you have available
+- The exercise increments
+
+These should also be store in local storage
+
+The initial increments should be 2.5kg for all except deadlift which should be 5kg
+
+Also the weights can go up or down according to rules:
+- If you successfully did all 5 sets the weight goes up next session
+- If you didn't then the weight stays the same
+- If you fail an exercise 3 sessions in a row then the fourth session will decrease by 10% (taking into account the barbell and available weights - as close as possible)
+
+I'd like the ability to edit/delete the previous sessions.
+
+When starting a new session the sets checkboxes should be set to false. When they are selected then a timer should start and a sound made at the end. This is for a rest period. The timer duration should also be in the settings and default to 180 seconds (3 minutes). The timer should be cancellable.
+
+The new workout should also take a look at the last workout and just default to the next type - if the last was A then do B.

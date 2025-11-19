@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#1a1a2e">
+    <title>5x5 Workout Tracker</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <h1>💪 5x5</h1>
+
+    <div class="controls">
+        <button onclick="app.showNewWorkout()">New Workout</button>
+        <button class="secondary" onclick="app.showSettings()">⚙️ Settings</button>
+        <button class="secondary" onclick="app.exportData()">Save To File</button>
+        <button class="secondary" onclick="document.getElementById('importFile').click()">Load From Save</button>
+        <button class="secondary" onclick="app.exportCSV()">Export CSV</button>
+        <input type="file" id="importFile" accept=".json" onchange="app.importData(event)">
+    </div>
+
+    <div id="workoutForm" class="workout-form hidden">
+        <h2>Log Today's Workout</h2>
+        <div class="form-group">
+            <label>Workout Type</label>
+            <select id="workoutType" onchange="app.selectWorkoutType()">
+                <option value="">Select workout...</option>
+                <option value="A">Workout A (Squat, Bench, Row)</option>
+                <option value="B">Workout B (Squat, OHP, Deadlift)</option>
+            </select>
+        </div>
+
+        <div id="exerciseGrid" class="exercise-grid"></div>
+
+        <button onclick="app.saveWorkout()">Save Workout</button>
+        <button class="secondary" onclick="app.cancelWorkout()">Cancel</button>
+    </div>
+
+    <div class="history">
+        <h2>Workout History</h2>
+        <div id="historyList"></div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

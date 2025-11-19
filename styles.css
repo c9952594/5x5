@@ -1,0 +1,279 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    background: #1a1a2e;
+    color: #eee;
+    padding: 20px;
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+h1 {
+    text-align: center;
+    margin-bottom: 30px;
+    color: #00d4ff;
+}
+
+.controls {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+button {
+    padding: 12px 20px;
+    background: #00d4ff;
+    color: #1a1a2e;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background 0.3s;
+}
+
+button:hover {
+    background: #00b8e6;
+}
+
+button.secondary {
+    background: #444;
+    color: #eee;
+}
+
+button.secondary:hover {
+    background: #555;
+}
+
+.workout-form {
+    background: #16213e;
+    padding: 20px;
+    border-radius: 12px;
+    margin-bottom: 30px;
+}
+
+.form-group {
+    margin-bottom: 15px;
+}
+
+label {
+    display: block;
+    margin-bottom: 5px;
+    color: #00d4ff;
+    font-weight: bold;
+}
+
+select, input {
+    width: 100%;
+    padding: 10px;
+    background: #0f3460;
+    border: 1px solid #00d4ff;
+    border-radius: 6px;
+    color: #eee;
+    font-size: 16px;
+}
+
+.exercise-grid {
+    display: grid;
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+.exercise-item {
+    background: #0f3460;
+    padding: 15px;
+    border-radius: 8px;
+}
+
+.exercise-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.exercise-name {
+    font-size: 18px;
+    font-weight: bold;
+    color: #00d4ff;
+}
+
+.weight-input {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.weight-input input {
+    width: 100px;
+}
+
+.sets-display {
+    display: flex;
+    gap: 12px;
+    margin-top: 10px;
+    justify-content: center;
+}
+
+.sets-display input[type="checkbox"] {
+    width: 28px;
+    height: 28px;
+    cursor: pointer;
+}
+
+.plate-calculation {
+    background: #1a1a2e;
+    padding: 10px;
+    border-radius: 6px;
+    margin-top: 10px;
+    font-size: 14px;
+}
+
+.history {
+    margin-top: 30px;
+}
+
+.workout-card {
+    background: #16213e;
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 15px;
+}
+
+.workout-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.workout-date {
+    color: #00d4ff;
+    font-weight: bold;
+}
+
+.workout-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.workout-exercise {
+    margin-left: 15px;
+    margin-bottom: 8px;
+}
+
+.hidden {
+    display: none;
+}
+
+input[type="file"] {
+    display: none;
+}
+
+.icon-btn {
+    padding: 8px 12px;
+    font-size: 14px;
+    min-width: auto;
+}
+
+.small-btn {
+    padding: 4px 8px;
+    font-size: 12px;
+    min-width: auto;
+    margin-left: 8px;
+}
+
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.modal-content {
+    background: #16213e;
+    padding: 30px;
+    border-radius: 12px;
+    max-width: 500px;
+    width: 90%;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.modal-content h2 {
+    margin-bottom: 20px;
+    color: #00d4ff;
+}
+
+.modal-content h3 {
+    margin-top: 20px;
+    margin-bottom: 10px;
+    color: #00d4ff;
+    font-size: 18px;
+}
+
+.modal-content small {
+    color: #aaa;
+    font-size: 12px;
+    display: block;
+    margin-top: 5px;
+}
+
+.rest-timer {
+    background: #00d4ff;
+    color: #1a1a2e;
+    padding: 10px;
+    border-radius: 6px;
+    margin-top: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-weight: bold;
+}
+
+.timer-cancel {
+    padding: 5px 10px;
+    font-size: 12px;
+    background: #1a1a2e;
+    color: #00d4ff;
+}
+
+.timer-complete {
+    background: #00ff88;
+    color: #1a1a2e;
+    padding: 10px;
+    border-radius: 6px;
+    margin-top: 10px;
+    text-align: center;
+    font-weight: bold;
+}
+
+@media (max-width: 600px) {
+    body {
+        padding: 10px;
+    }
+
+    .controls {
+        flex-direction: column;
+    }
+
+    button {
+        width: 100%;
+    }
+
+    .modal-content {
+        padding: 20px;
+    }
+}
