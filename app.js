@@ -4,6 +4,7 @@ const app = {
         barWeight: 20,
         platePairs: [20, 20, 10, 5, 2.5, 1.25], // Actual plate pairs available
         restTimer: 180, // seconds
+        exerciseCountdown: 5, // seconds countdown before exercise timer starts
         githubToken: '',
         gistId: '',
     },
@@ -407,7 +408,41 @@ const app = {
     },
 
     playSound() {
-        // Create a simple beep sound using Web Audio API
+        // Create a distinctive 3-tone jingle that cuts through music
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const gainNode = audioContext.createGain();
+        gainNode.connect(audioContext.destination);
+
+        // Three-tone ascending jingle: C5 -> E5 -> G5 (major chord)
+        const notes = [
+            { freq: 523.25, start: 0, duration: 0.15 },      // C5
+            { freq: 659.25, start: 0.15, duration: 0.15 },   // E5
+            { freq: 783.99, start: 0.30, duration: 0.25 }    // G5 (longer final note)
+        ];
+
+        notes.forEach(note => {
+            const osc = audioContext.createOscillator();
+            const noteGain = audioContext.createGain();
+            
+            osc.connect(noteGain);
+            noteGain.connect(gainNode);
+            
+            osc.frequency.value = note.freq;
+            osc.type = 'sine';
+            
+            // Louder volume (0.5) with quick attack and decay
+            const startTime = audioContext.currentTime + note.start;
+            noteGain.gain.setValueAtTime(0, startTime);
+            noteGain.gain.linearRampToValueAtTime(0.5, startTime + 0.02);
+            noteGain.gain.exponentialRampToValueAtTime(0.01, startTime + note.duration);
+            
+            osc.start(startTime);
+            osc.stop(startTime + note.duration);
+        });
+    },
+
+    playCountdownBeep(isLast = false) {
+        // Short beep for countdown (4 short beeps), or long beep for final countdown
         const audioContext = new (window.AudioContext || window.webkitAudioContext)();
         const oscillator = audioContext.createOscillator();
         const gainNode = audioContext.createGain();
@@ -415,14 +450,18 @@ const app = {
         oscillator.connect(gainNode);
         gainNode.connect(audioContext.destination);
 
-        oscillator.frequency.value = 800;
+        oscillator.frequency.value = isLast ? 880 : 440; // Higher pitch for final beep
         oscillator.type = 'sine';
 
-        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+        const duration = isLast ? 0.5 : 0.1; // Longer final beep
+        const startTime = audioContext.currentTime;
+        
+        gainNode.gain.setValueAtTime(0, startTime);
+        gainNode.gain.linearRampToValueAtTime(0.4, startTime + 0.01);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
 
-        oscillator.start(audioContext.currentTime);
-        oscillator.stop(audioContext.currentTime + 0.5);
+        oscillator.start(startTime);
+        oscillator.stop(startTime + duration);
     },
 
     startExerciseTimer(exerciseKey) {
@@ -432,31 +471,56 @@ const app = {
         const durationInput = document.getElementById(`duration-${exerciseKey}`);
         const duration = parseInt(durationInput.value);
         const timerDisplay = document.getElementById(`exercise-timer-${exerciseKey}`);
+        const countdownSeconds = this.settings.exerciseCountdown || 5;
         
         this.activeExerciseTimer = exerciseKey;
-        this.exerciseTimerEnd = Date.now() + (duration * 1000);
         
-        timerDisplay.innerHTML = `<div class="exercise-timer">
-            <span id="exercise-countdown">${this.formatTime(duration)}</span>
+        // Start countdown phase
+        let countdown = countdownSeconds;
+        timerDisplay.innerHTML = `<div class="exercise-timer countdown-timer">
+            Get ready: <span id="exercise-countdown">${countdown}</span>
         </div>`;
-
-        this.exerciseTimerInterval = setInterval(() => {
-            const remaining = Math.max(0, Math.ceil((this.exerciseTimerEnd - Date.now()) / 1000));
-            const countdown = document.getElementById('exercise-countdown');
+        
+        const countdownInterval = setInterval(() => {
+            countdown--;
+            const countdownEl = document.getElementById('exercise-countdown');
             
-            if (countdown) {
-                countdown.textContent = this.formatTime(remaining);
+            if (countdownEl) {
+                countdownEl.textContent = countdown;
             }
+            
+            if (countdown > 0) {
+                this.playCountdownBeep(false); // Short beep
+            } else {
+                clearInterval(countdownInterval);
+                this.playCountdownBeep(true); // Long beep to start
+                
+                // Start actual exercise timer
+                this.exerciseTimerEnd = Date.now() + (duration * 1000);
+                
+                timerDisplay.innerHTML = `<div class="exercise-timer">
+                    <span id="exercise-countdown">${this.formatTime(duration)}</span>
+                </div>`;
 
-            if (remaining === 0) {
-                this.playSound();
-                this.stopExerciseTimer();
-                timerDisplay.innerHTML = '<div class="timer-complete">Time complete!</div>';
-                setTimeout(() => {
-                    timerDisplay.innerHTML = '';
-                }, 3000);
+                this.exerciseTimerInterval = setInterval(() => {
+                    const remaining = Math.max(0, Math.ceil((this.exerciseTimerEnd - Date.now()) / 1000));
+                    const countdownDisplay = document.getElementById('exercise-countdown');
+                    
+                    if (countdownDisplay) {
+                        countdownDisplay.textContent = this.formatTime(remaining);
+                    }
+
+                    if (remaining === 0) {
+                        this.playSound();
+                        this.stopExerciseTimer();
+                        timerDisplay.innerHTML = '<div class="timer-complete">Time complete!</div>';
+                        setTimeout(() => {
+                            timerDisplay.innerHTML = '';
+                        }, 3000);
+                    }
+                }, 100);
             }
-        }, 100);
+        }, 1000);
     },
 
     stopExerciseTimer() {
@@ -675,6 +739,12 @@ const app = {
                         <input type="number" value="${this.settings.restTimer}" id="setting-restTimer">
                     </div>
 
+                    <div class="form-group">
+                        <label>Exercise Countdown (seconds)</label>
+                        <input type="number" value="${this.settings.exerciseCountdown || 5}" id="setting-exerciseCountdown">
+                        <small>Countdown before timed exercises start (e.g., time to grip the bar for hanging)</small>
+                    </div>
+
                     <div class="form-group github-setup">
                         <h3>☁️ Cloud Sync Setup</h3>
                         <p>To sync your workout data across devices using GitHub:</p>
@@ -846,6 +916,7 @@ const app = {
     saveSettings() {
         this.settings.barWeight = parseFloat(document.getElementById('setting-barWeight').value);
         this.settings.restTimer = parseInt(document.getElementById('setting-restTimer').value);
+        this.settings.exerciseCountdown = parseInt(document.getElementById('setting-exerciseCountdown').value);
         this.settings.githubToken = document.getElementById('setting-githubToken').value.trim();
         
         // Save selected gist ID
