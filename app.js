@@ -5,6 +5,9 @@ const app = {
         platePairs: [20, 20, 10, 5, 2.5, 1.25], // Actual plate pairs available
         restTimer: 180, // seconds
         exerciseCountdown: 5, // seconds countdown before exercise timer starts
+        voiceEnabled: true,
+        voiceRestComplete: 'Rest complete',
+        voiceExerciseComplete: 'Exercise complete',
         githubToken: '',
         gistId: '',
     },
@@ -59,6 +62,17 @@ const app = {
             this.workouts = data.workouts || [];
             this.settings = data.settings || this.settings;
             this.lastSyncedWorkoutCount = data.lastSyncedWorkoutCount || 0;
+            
+            // Set voice defaults for existing users
+            if (this.settings.voiceEnabled === undefined) {
+                this.settings.voiceEnabled = true;
+            }
+            if (!this.settings.voiceRestComplete) {
+                this.settings.voiceRestComplete = 'Rest complete';
+            }
+            if (!this.settings.voiceExerciseComplete) {
+                this.settings.voiceExerciseComplete = 'Exercise complete';
+            }
         }
     },
 
@@ -381,6 +395,7 @@ const app = {
 
             if (remaining === 0) {
                 this.playSound();
+                this.speakText(this.settings.voiceRestComplete);
                 this.cancelRestTimer();
                 timerDisplay.innerHTML = '<div class="timer-complete">Rest complete!</div>';
                 setTimeout(() => {
@@ -408,16 +423,18 @@ const app = {
     },
 
     playSound() {
-        // Create a distinctive 3-tone jingle that cuts through music
+        // Create a distinctive 5-tone victory jingle
         const audioContext = new (window.AudioContext || window.webkitAudioContext)();
         const gainNode = audioContext.createGain();
         gainNode.connect(audioContext.destination);
 
-        // Three-tone ascending jingle: C5 -> E5 -> G5 (major chord)
+        // Five-tone fanfare: C5 -> E5 -> G5 -> C6 -> G5 (triumphant pattern)
         const notes = [
-            { freq: 523.25, start: 0, duration: 0.15 },      // C5
-            { freq: 659.25, start: 0.15, duration: 0.15 },   // E5
-            { freq: 783.99, start: 0.30, duration: 0.25 }    // G5 (longer final note)
+            { freq: 523.25, start: 0, duration: 0.2 },       // C5
+            { freq: 659.25, start: 0.20, duration: 0.2 },    // E5
+            { freq: 783.99, start: 0.40, duration: 0.2 },    // G5
+            { freq: 1046.50, start: 0.60, duration: 0.3 },   // C6 (octave up)
+            { freq: 783.99, start: 0.90, duration: 0.4 }     // G5 (long finish)
         ];
 
         notes.forEach(note => {
@@ -430,15 +447,29 @@ const app = {
             osc.frequency.value = note.freq;
             osc.type = 'sine';
             
-            // Louder volume (0.5) with quick attack and decay
+            // Louder volume (0.6) with quick attack and decay
             const startTime = audioContext.currentTime + note.start;
             noteGain.gain.setValueAtTime(0, startTime);
-            noteGain.gain.linearRampToValueAtTime(0.5, startTime + 0.02);
+            noteGain.gain.linearRampToValueAtTime(0.6, startTime + 0.02);
             noteGain.gain.exponentialRampToValueAtTime(0.01, startTime + note.duration);
             
             osc.start(startTime);
             osc.stop(startTime + note.duration);
         });
+    },
+
+    speakText(text) {
+        // Speak custom text if voice is enabled (default true if not set)
+        const voiceEnabled = this.settings.voiceEnabled !== false;
+        if (voiceEnabled && 'speechSynthesis' in window && text) {
+            setTimeout(() => {
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.rate = 1.2; // Slightly faster
+                utterance.pitch = 1.2; // Slightly higher pitch
+                utterance.volume = 0.8;
+                window.speechSynthesis.speak(utterance);
+            }, 1400); // After the 1.3s jingle finishes
+        }
     },
 
     playCountdownBeep(isLast = false) {
@@ -512,6 +543,7 @@ const app = {
 
                     if (remaining === 0) {
                         this.playSound();
+                        this.speakText(this.settings.voiceExerciseComplete);
                         this.stopExerciseTimer();
                         timerDisplay.innerHTML = '<div class="timer-complete">Time complete!</div>';
                         setTimeout(() => {
@@ -745,6 +777,26 @@ const app = {
                         <small>Countdown before timed exercises start (e.g., time to grip the bar for hanging)</small>
                     </div>
 
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" ${this.settings.voiceEnabled !== false ? 'checked' : ''} id="setting-voiceEnabled" style="width: auto; display: inline-block; margin-right: 8px;">
+                            Enable Voice Announcements
+                        </label>
+                        <small>Spoken alerts after timers complete (uses browser text-to-speech)</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Rest Complete Message</label>
+                        <input type="text" value="${this.settings.voiceRestComplete || 'Rest complete'}" id="setting-voiceRestComplete">
+                        <small>What to say when rest timer completes</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Exercise Complete Message</label>
+                        <input type="text" value="${this.settings.voiceExerciseComplete || 'Exercise complete'}" id="setting-voiceExerciseComplete">
+                        <small>What to say when timed exercise completes</small>
+                    </div>
+
                     <div class="form-group github-setup">
                         <h3>☁️ Cloud Sync Setup</h3>
                         <p>To sync your workout data across devices using GitHub:</p>
@@ -917,6 +969,9 @@ const app = {
         this.settings.barWeight = parseFloat(document.getElementById('setting-barWeight').value);
         this.settings.restTimer = parseInt(document.getElementById('setting-restTimer').value);
         this.settings.exerciseCountdown = parseInt(document.getElementById('setting-exerciseCountdown').value);
+        this.settings.voiceEnabled = document.getElementById('setting-voiceEnabled').checked;
+        this.settings.voiceRestComplete = document.getElementById('setting-voiceRestComplete').value;
+        this.settings.voiceExerciseComplete = document.getElementById('setting-voiceExerciseComplete').value;
         this.settings.githubToken = document.getElementById('setting-githubToken').value.trim();
         
         // Save selected gist ID
